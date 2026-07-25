@@ -1,4 +1,12 @@
 import { useEffect, useState } from "react";
+// `status_color` comes out of the `support_tickets_status` table — i.e. it is
+// whatever an admin typed. Interpolating it straight into a class name was
+// broken twice over: Tailwind cannot statically extract an interpolated class
+// name, and an unrecognised value produced a `chip--<nonsense>` matching no
+// rule at all, so the pill rendered with no colour. resolveChipVariant maps the
+// known aliases (violet -> cat-violet, red -> danger, …) and falls back to
+// `neutral`, so the class it returns always exists in primitives.css.
+import { resolveChipVariant } from "@tracht-digital-solutions/tds-shared/design";
 
 interface TicketRow {
   id: number;
@@ -99,7 +107,7 @@ export default function TicketBoard() {
               <button type="button" className="ticket-list__link" onClick={() => openTicket(t.id)}>
                 {t.subject}
               </button>
-              <span className={`chip chip--${t.status_color}`}>{t.status_name}</span>
+              <span className={`chip ${resolveChipVariant(t.status_color)}`}>{t.status_name}</span>
               {t.customer_action_required ? (
                 <span className="chip chip--warning">Aktion erforderlich</span>
               ) : null}
@@ -149,7 +157,7 @@ function TicketDetailView({
         ← Zurück
       </button>
       <h2>{ticket.subject}</h2>
-      <span className={`chip chip--${ticket.status_color}`}>{ticket.status_name}</span>
+      <span className={`chip ${resolveChipVariant(ticket.status_color)}`}>{ticket.status_name}</span>
       {ticket.customer_action_required ? (
         <p className="ticket-detail__action">
           <strong>Aktion erforderlich:</strong> {ticket.customer_action_note ?? "Bitte antworten Sie."}
