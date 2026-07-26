@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "@tracht-digital-solutions/tds-shared/components";
 // `status_color` comes out of the `support_tickets_status` table — i.e. it is
 // whatever an admin typed. Interpolating it straight into a class name was
 // broken twice over: Tailwind cannot statically extract an interpolated class
@@ -97,7 +98,7 @@ export default function TicketBoard() {
       ) : null}
 
       {tickets === null ? (
-        <p>Wird geladen …</p>
+        <p role="status"><Spinner /></p>
       ) : tickets.length === 0 ? (
         <p>Keine Tickets vorhanden.</p>
       ) : (

@@ -1,6 +1,6 @@
 {
   "name": "@tracht-digital-solutions/tds-ext-support-tickets",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Support-ticket system extension for the TDS panel platform: customer + admin ticketing (manifest + PHP Module) via frontend-contract, email through the core Mailer.",
   "license": "UNLICENSED",
   "private": false,

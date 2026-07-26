@@ -18,5 +18,5 @@ export default function OpenTicketsCount() {
       alive = false;
     };
   }, []);
-  return <p className="widget__metric">{open === null ? "…" : open}</p>;
+  return <p className="tds-widget__metric">{open === null ? "…" : open}</p>;
 }

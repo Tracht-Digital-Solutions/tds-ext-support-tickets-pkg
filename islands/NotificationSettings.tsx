@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "@tracht-digital-solutions/tds-shared/components";
 
 type Toggles = Record<string, boolean>;
 
@@ -38,7 +39,7 @@ export default function NotificationSettings() {
     setSaving(false);
   };
 
-  if (toggles === null) return <p>Wird geladen …</p>;
+  if (toggles === null) return <p role="status"><Spinner /></p>;
 
   return (
     <fieldset className="ticket-settings" disabled={saving}>
