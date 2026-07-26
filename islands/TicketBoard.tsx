@@ -102,9 +102,9 @@ export default function TicketBoard() {
       ) : tickets.length === 0 ? (
         <p>Keine Tickets vorhanden.</p>
       ) : (
-        <ul className="ticket-list">
+        <ul className="tds-list">
           {tickets.map((t) => (
-            <li key={t.id} className="ticket-list__row">
+            <li key={t.id} className="tds-list__row">
               <button type="button" className="ticket-list__link" onClick={() => openTicket(t.id)}>
                 {t.subject}
               </button>
@@ -178,10 +178,21 @@ function TicketDetailView({
         </ul>
       ) : null}
 
-      <ol className="ticket-thread">
+      <ol className="tds-thread">
         {ticket.comments.map((c) => (
-          <li key={c.id} className={`ticket-thread__item ticket-thread__item--${c.author_type}`}>
-            <span className="ticket-thread__author">
+          // `--own` right-aligns the bubble, `--other` left-aligns it. The side
+          // is picked from the same viewpoint the author label already assumes
+          // below: the customer is the reader ("Sie"), support is the
+          // counterpart. Mapped explicitly rather than interpolating
+          // `--${author_type}`, which would produce a class that matches no rule
+          // (the same trap the DB-driven status colour fell into).
+          <li
+            key={c.id}
+            className={`tds-thread__item ${
+              c.author_type === "owner" ? "tds-thread__item--other" : "tds-thread__item--own"
+            }`}
+          >
+            <span className="tds-thread__author">
               {c.author_type === "owner" ? "Support" : "Sie"}
             </span>
             <p>{c.body}</p>

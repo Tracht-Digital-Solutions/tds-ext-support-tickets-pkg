@@ -44,13 +44,17 @@ export default function NotificationSettings() {
   return (
     <fieldset className="ticket-settings" disabled={saving}>
       {Object.keys(LABELS).map((key) => (
-        <label key={key} className="ticket-settings__row">
+        // `.tds-toggle-row` is `space-between`, so the label text comes first
+        // and the control sits at the trailing edge — the conventional settings
+        // layout. The input stays inside the <label> so clicking the text still
+        // toggles it.
+        <label key={key} className="tds-toggle-row">
+          <span>{LABELS[key]}</span>
           <input
             type="checkbox"
             checked={Boolean(toggles[key])}
             onChange={(e) => save({ ...toggles, [key]: e.target.checked })}
           />
-          {LABELS[key]}
         </label>
       ))}
     </fieldset>
