@@ -82,7 +82,7 @@ export default function TicketBoard() {
 
   return (
     <div className="ticket-board">
-      <div className="ticket-board__toolbar">
+      <div className="tds-toolbar">
         <button type="button" onClick={() => setCreating((v) => !v)}>
           {creating ? "Abbrechen" : "Neues Ticket"}
         </button>
@@ -266,7 +266,7 @@ function NewTicketForm({ onCreated }: { onCreated: () => void }) {
         rows={4}
         required
       />
-      <div className="ticket-form__meta">
+      <div className="marginalia">
         <select value={type} onChange={(e) => setType(e.target.value)}>
           <option value="question">Frage</option>
           <option value="bug">Fehler</option>
