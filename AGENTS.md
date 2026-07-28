@@ -33,6 +33,39 @@ contract and the core services.
   core AuthMiddleware). Don't capture UserContext at register time.
 - DB-backed tests skip without `TDS_TEST_DB_DSN`; the committed test covers
   routes + RBAC without a DB (auth short-circuits before repo access).
+- **This package is pinned `^0.7.x` by BOTH products, not `^0.1.x`.** The root
+  `CLAUDE.md` states extensions stay in the `0.1.x` line; that is not universal
+  (this one is 0.7, contact-tickets is 0.2). What actually matters is never
+  leaving the minor line the consumers caret-pin — under 0.x a caret means
+  `>=0.7.x <0.8.0`, so a 0.8.0 here silently stops reaching the products.
+  `tests/packaging.test.ts` guards it.
+
+## Tests
+
+`npm run test:run` (vitest; jsdom per-file via a `@vitest-environment` docblock).
+
+- `islands/TicketBoard.test.tsx` — list → detail → reply thread, the new-ticket
+  form, and attachment upload (asserted to go out as multipart `FormData`, not
+  JSON). A non-OK response must never populate the board: the error-path tests
+  deliberately carry a `tickets` payload, because against an EMPTY error body
+  both branches look identical and the assertion proves nothing.
+- `islands/NotificationSettings.test.tsx` — the three toggles save immediately
+  and round-trip the whole map. The 403 case likewise carries a payload: this
+  endpoint is admin-only, so a denied response must not populate the UI.
+- `src/index.test.ts` + `tests/packaging.test.ts` — the manifest as a product
+  build sees it, and that every specifier resolves to a real file that is both
+  exported and published.
+
+**Deliberately not asserted:** the `chip chip--${status_color}` class. That
+value is admin-typed data from `support_tickets_status`, and the fix (routing it
+through `resolveChipVariant`) lives on the `design/unify-library` branch, which
+needs an unpublished tds-shared. Pinning the pre-fix class here would break that
+merge; the status NAME is asserted instead.
+
+Verified by mutation: 20 deliberate breakages introduced, 19 caught. The
+twentieth — deleting the `if (reply.trim() === "") return;` guard — is an
+equivalent mutant: the Senden button is already `disabled` in exactly that
+state, so the guard is unreachable from the UI. It is defence in depth, kept.
 
 ## Checkpoint status
 
