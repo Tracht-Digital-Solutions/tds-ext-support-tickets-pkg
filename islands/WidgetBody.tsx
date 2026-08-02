@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { Skeleton } from "@tracht-digital-solutions/tds-shared/components";
+
 /**
  * "Offene Tickets" widget body. Fetches the count from the manifest's
  * dataEndpoint (`/tickets/summary`) via the base API wrapper. Checkpoint-1 uses
@@ -18,5 +20,15 @@ export default function OpenTicketsCount() {
       alive = false;
     };
   }, []);
-  return <p className="tds-widget__metric">{open === null ? "…" : open}</p>;
+  // A literal "…" was the loading state on 12 of the 13 dashboard widgets:
+  // static, indistinguishable from a real value, and invisible to assistive
+  // tech. `aria-busy` announces the wait; the skeleton shows it.
+  if (open === null) {
+    return (
+      <p className="tds-widget__metric" aria-busy="true">
+        <Skeleton width="3ch" height="1.75rem" />
+      </p>
+    );
+  }
+  return <p className="tds-widget__metric">{open}</p>;
 }

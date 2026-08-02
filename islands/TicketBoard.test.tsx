@@ -205,7 +205,7 @@ describe("the comment thread", () => {
     // Asserting only that both labels EXIST passes even when they are
     // swapped, which would show the customer their own words as "Support".
     await openDetail(withComments);
-    const items = within(document.querySelector("ol.ticket-thread")!).getAllByRole("listitem");
+    const items = within(document.querySelector("ol.tds-thread")!).getAllByRole("listitem");
     const mine = items.find((li) => li.textContent!.includes("Bitte helfen"))!;
     const theirs = items.find((li) => li.textContent!.includes("Wir schauen"))!;
     expect(within(mine).getByText("Sie")).toBeTruthy();
@@ -214,7 +214,7 @@ describe("the comment thread", () => {
 
   it("renders comments in the order the API returned them", async () => {
     await openDetail(withComments);
-    const items = within(document.querySelector("ol.ticket-thread")!).getAllByRole("listitem");
+    const items = within(document.querySelector("ol.tds-thread")!).getAllByRole("listitem");
     expect(items[0]!.textContent).toContain("Bitte helfen");
     expect(items[1]!.textContent).toContain("Wir schauen");
   });
@@ -224,7 +224,7 @@ describe("the comment thread", () => {
       ...DETAIL,
       comments: [{ id: 1, author_type: "customer", body: "<img src=x onerror=alert(1)>", created_at: "x" }],
     });
-    expect(document.querySelector("ol.ticket-thread img")).toBeNull();
+    expect(document.querySelector("ol.tds-thread img")).toBeNull();
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeTruthy();
   });
 });

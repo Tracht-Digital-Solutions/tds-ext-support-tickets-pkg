@@ -81,9 +81,13 @@ export default function TicketBoard() {
   }
 
   return (
-    <div className="ticket-board">
+    <div className="tds-stack">
       <div className="tds-toolbar">
-        <button type="button" onClick={() => setCreating((v) => !v)}>
+        <button
+          type="button"
+          className={creating ? "btn btn-ghost" : "btn btn-primary"}
+          onClick={() => setCreating((v) => !v)}
+        >
           {creating ? "Abbrechen" : "Neues Ticket"}
         </button>
       </div>
@@ -100,12 +104,12 @@ export default function TicketBoard() {
       {tickets === null ? (
         <p role="status"><Spinner /></p>
       ) : tickets.length === 0 ? (
-        <p>Keine Tickets vorhanden.</p>
+        <p className="tds-empty">Keine Tickets vorhanden.</p>
       ) : (
         <ul className="tds-list">
           {tickets.map((t) => (
             <li key={t.id} className="tds-list__row">
-              <button type="button" className="ticket-list__link" onClick={() => openTicket(t.id)}>
+              <button type="button" className="btn btn-ghost" onClick={() => openTicket(t.id)}>
                 {t.subject}
               </button>
               <span className={`chip ${resolveChipVariant(t.status_color)}`}>{t.status_name}</span>
@@ -153,8 +157,8 @@ function TicketDetailView({
   };
 
   return (
-    <article className="ticket-detail">
-      <button type="button" onClick={onBack}>
+    <article className="tds-stack">
+      <button type="button" className="btn btn-ghost" onClick={onBack}>
         ← Zurück
       </button>
       <h2>{ticket.subject}</h2>
@@ -200,14 +204,22 @@ function TicketDetailView({
         ))}
       </ol>
 
-      <div className="ticket-reply">
+      <div className="tds-compose">
         <textarea
+          className="field-boxed"
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           placeholder="Antwort schreiben …"
           rows={3}
         />
-        <button type="button" onClick={send} disabled={sending || reply.trim() === ""}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={send}
+          disabled={sending || reply.trim() === ""}
+          aria-busy={sending}
+        >
+          {sending ? <Spinner size="sm" /> : null}
           Senden
         </button>
         <label className="ticket-reply__attach">
@@ -247,40 +259,53 @@ function NewTicketForm({ onCreated }: { onCreated: () => void }) {
 
   return (
     <form
-      className="ticket-form"
+      className="tds-card tds-stack"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
       <input
+        className="field-boxed"
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
         placeholder="Betreff"
         required
       />
       <textarea
+        className="field-boxed"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Beschreibung"
         rows={4}
         required
       />
-      <div className="marginalia">
-        <select value={type} onChange={(e) => setType(e.target.value)}>
+      <div className="tds-row">
+        <select
+          className="field-boxed"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          aria-label="Typ"
+        >
           <option value="question">Frage</option>
           <option value="bug">Fehler</option>
           <option value="feature">Wunsch</option>
           <option value="other">Sonstiges</option>
         </select>
-        <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+        <select
+          className="field-boxed"
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          aria-label="Priorität"
+        >
           <option value="low">Niedrig</option>
           <option value="normal">Normal</option>
           <option value="high">Hoch</option>
           <option value="urgent">Dringend</option>
         </select>
       </div>
-      <button type="submit" disabled={saving}>
+      <button type="submit" className="btn btn-primary" disabled={saving} aria-busy={saving}>
+        {saving ? <Spinner size="sm" /> : null}
         Ticket erstellen
       </button>
     </form>
