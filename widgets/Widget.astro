@@ -3,9 +3,14 @@
 // chrome + a hydrated island that fetches /tickets/summary. Rendered by the
 // Dashboard host via virtual:frontend-widgets.
 import OpenTicketsCount from "../islands/WidgetBody.tsx";
+// HYDRATION: `client:visible`, not `client:load`. The dashboard renders 13
+// widgets; eager hydration meant 13 React roots AND 13 fetches fired on every
+// dashboard load, including widgets the user had switched off in their layout
+// (which are display:none, so IntersectionObserver never fires for them at
+// all). Do not change this back without measuring the dashboard again.
 ---
 
 <article class="tds-widget">
   <h3 class="tds-widget__title">Offene Tickets</h3>
-  <OpenTicketsCount client:load />
+  <OpenTicketsCount client:visible />
 </article>
