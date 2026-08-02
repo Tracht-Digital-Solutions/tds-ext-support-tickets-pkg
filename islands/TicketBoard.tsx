@@ -102,7 +102,7 @@ export default function TicketBoard() {
       ) : null}
 
       {tickets === null ? (
-        <p role="status"><Spinner /></p>
+        <p><Spinner /></p>
       ) : tickets.length === 0 ? (
         <p className="tds-empty">Keine Tickets vorhanden.</p>
       ) : (

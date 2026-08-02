@@ -39,7 +39,7 @@ export default function NotificationSettings() {
     setSaving(false);
   };
 
-  if (toggles === null) return <p role="status"><Spinner /></p>;
+  if (toggles === null) return <p><Spinner /></p>;
 
   return (
     <fieldset className="ticket-settings" disabled={saving}>
