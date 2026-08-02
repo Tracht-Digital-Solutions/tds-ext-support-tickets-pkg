@@ -26,6 +26,7 @@
   "scripts": {
     "build": "tsup",
     "type-check": "tsc --noEmit",
+    "lint:primitives": "node scripts/lint-primitives.mjs",
     "clean": "rimraf dist",
     "test": "vitest",
     "test:run": "vitest run"

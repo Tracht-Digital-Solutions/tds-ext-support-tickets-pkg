@@ -76,6 +76,13 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      - name: Lint primitives
+        # Extensions ship no CSS of their own, so a control without the
+        # shared class is unstyled — and an unclassed <input> is INVISIBLE,
+        # because Tailwind preflight zeroes borders. 86 buttons and 105
+        # controls had drifted across the packages before this step existed.
+        run: npm run lint:primitives
+
       - name: Build
         run: npm run build
 
