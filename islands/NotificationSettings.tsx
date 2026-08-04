@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Spinner } from "@tracht-digital-solutions/tds-shared/components";
+import { Spinner, toast } from "@tracht-digital-solutions/tds-shared/components";
 
 type Toggles = Record<string, boolean>;
 
@@ -28,15 +28,34 @@ export default function NotificationSettings() {
       .catch(() => setToggles({}));
   }, []);
 
+  /**
+   * The toggle flips optimistically, so the response MUST be checked: this
+   * used to `await` the PUT and discard it, which meant a 403 or a 500 left
+   * the checkbox showing a setting that was never stored. On failure the
+   * optimistic flip is rolled back and the reason is toasted.
+   */
   const save = async (next: Toggles) => {
+    const previous = toggles;
     setToggles(next);
     setSaving(true);
-    await api("/admin/ticket-settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(next),
-    });
-    setSaving(false);
+    try {
+      const res = await api("/admin/ticket-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      if (res.ok) {
+        toast.success("Benachrichtigungen gespeichert.");
+      } else {
+        setToggles(previous);
+        toast.danger(`Speichern fehlgeschlagen (HTTP ${res.status}).`);
+      }
+    } catch {
+      setToggles(previous);
+      toast.danger("Speichern fehlgeschlagen — die API ist nicht erreichbar.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (toggles === null) return <p><Spinner /></p>;

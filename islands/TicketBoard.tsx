@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Spinner } from "@tracht-digital-solutions/tds-shared/components";
+import { Spinner, toast } from "@tracht-digital-solutions/tds-shared/components";
 // `status_color` comes out of the `support_tickets_status` table — i.e. it is
 // whatever an admin typed. Interpolating it straight into a class name was
 // broken twice over: Tailwind cannot statically extract an interpolated class
@@ -136,24 +136,45 @@ function TicketDetailView({
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Both mutations used to discard the response and clear the box regardless,
+  // so a rejected reply looked exactly like a sent one — with the text gone.
+  // The draft is now only cleared once the POST actually succeeded.
   const send = async () => {
     if (reply.trim() === "") return;
     setSending(true);
-    await api(`/tickets/${ticket.id}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: reply.trim() }),
-    });
-    setReply("");
-    setSending(false);
-    onReload();
+    try {
+      const res = await api(`/tickets/${ticket.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: reply.trim() }),
+      });
+      if (res.ok) {
+        setReply("");
+        onReload();
+      } else {
+        toast.danger(`Antwort konnte nicht gesendet werden (HTTP ${res.status}).`);
+      }
+    } catch {
+      toast.danger("Antwort konnte nicht gesendet werden — die API ist nicht erreichbar.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const upload = async (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    await api(`/tickets/${ticket.id}/attachments`, { method: "POST", body: form });
-    onReload();
+    try {
+      const res = await api(`/tickets/${ticket.id}/attachments`, { method: "POST", body: form });
+      if (res.ok) {
+        toast.success(`„${file.name}" hochgeladen.`);
+        onReload();
+      } else {
+        toast.danger(`Upload fehlgeschlagen (HTTP ${res.status}).`);
+      }
+    } catch {
+      toast.danger("Upload fehlgeschlagen — die API ist nicht erreichbar.");
+    }
   };
 
   return (
@@ -248,13 +269,25 @@ function NewTicketForm({ onCreated }: { onCreated: () => void }) {
   const submit = async () => {
     if (subject.trim() === "" || description.trim() === "") return;
     setSaving(true);
-    const res = await api("/tickets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, description, type, priority }),
-    });
-    setSaving(false);
-    if (res.ok) onCreated();
+    try {
+      const res = await api("/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, description, type, priority }),
+      });
+      if (res.ok) {
+        toast.success("Ticket erstellt.");
+        onCreated();
+      } else {
+        // Was `if (res.ok) onCreated()` with no else: a rejected ticket left
+        // the form sitting there as if the button had never been pressed.
+        toast.danger(`Ticket konnte nicht erstellt werden (HTTP ${res.status}).`);
+      }
+    } catch {
+      toast.danger("Ticket konnte nicht erstellt werden — die API ist nicht erreichbar.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
