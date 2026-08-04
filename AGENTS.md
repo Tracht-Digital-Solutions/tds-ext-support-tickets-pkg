@@ -21,6 +21,17 @@ contract and the core services.
   `customer`), never trusted from the client. `is_internal` comments are never
   returned to a customer principal (the customer `comments()` query filters them).
 
+- **Every mutation reports its outcome — via a toast, from tds-shared.** Four
+  paths here used to `await` a request and discard the response:
+  `NotificationSettings.save` (the checkbox flips optimistically, so a 403 left
+  it lying about a stored setting — it now rolls back), `TicketDetailView.send`
+  (cleared the reply box either way, i.e. a rejected reply looked sent, with the
+  text gone), `upload`, and `NewTicketForm.submit`. `toast.success/…danger` come
+  from `@tracht-digital-solutions/tds-shared/components`; **never mount a
+  `ToastHost`** — the frontend host owns the single one. Failure messages carry
+  the HTTP status, because that is what separates "session expired" from
+  "service down" in a bug report.
+
 ## Gotchas
 
 - Migration class names are **module-prefixed** (`SupportTickets*`) AND the

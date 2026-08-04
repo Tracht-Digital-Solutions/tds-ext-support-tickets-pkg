@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import NotificationSettings from "./NotificationSettings";
+import { TOAST_EVENT } from "@tracht-digital-solutions/tds-shared/toast";
 
 /**
  * The three admin notification toggles, backed by `/admin/ticket-settings`.
@@ -193,5 +194,56 @@ describe("toggling", () => {
     await waitFor(() => expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1));
     await u.click(screen.getByRole("checkbox", { name: /Kunde bei Antwort/ }));
     await waitFor(() => expect(calls.filter((c) => c.method === "PUT")).toHaveLength(2));
+  });
+});
+
+describe("a rejected save", () => {
+  /**
+   * The toggle flips optimistically, so a save that fails must both undo the
+   * flip and say why. Before this, the response was awaited and discarded: a
+   * 403 or a 500 left the checkbox showing a setting the server never stored,
+   * and the admin had no way to know their notifications were still off.
+   */
+  let toasts: Array<{ variant: string; message: string }>;
+  const collect = (e: Event) => {
+    toasts.push((e as CustomEvent<{ variant: string; message: string }>).detail);
+  };
+
+  beforeEach(() => {
+    toasts = [];
+    window.addEventListener(TOAST_EVENT, collect);
+  });
+  afterEach(() => window.removeEventListener(TOAST_EVENT, collect));
+
+  /** Make the next PUT answer with `status`. */
+  function failPut(status: number) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
+        if (method === "PUT") return { ok: false, status, json: async () => ({}) } as Response;
+        return { ok: true, status: 200, json: async () => ({ settings: {} }) } as Response;
+      }),
+    );
+  }
+
+  it("rolls the checkbox back and reports the status", async () => {
+    failPut(500);
+    render(<NotificationSettings />);
+    const box = (await screen.findByRole("checkbox", { name: /Admin bei neuem Ticket/ })) as HTMLInputElement;
+    await user().click(box);
+
+    await waitFor(() => expect(toasts.length).toBe(1));
+    expect(toasts[0]!.variant).toBe("danger");
+    expect(toasts[0]!.message).toContain("500");
+    expect(box.checked).toBe(false);
+  });
+
+  it("confirms a save that worked", async () => {
+    const u = await renderSettings();
+    await u.click(screen.getByRole("checkbox", { name: /Admin bei neuem Ticket/ }));
+    await waitFor(() => expect(toasts.length).toBe(1));
+    expect(toasts[0]!.variant).toBe("success");
   });
 });
