@@ -63,13 +63,40 @@ for (const file of files) {
       if (!/\bfield\b/.test(cls)) findings.push(`${where}  <${el}> needs "field-boxed" (or "field")`);
     }
   }
+
+  // Tables. A bare <table> gets browser defaults — no cell padding, no header
+  // treatment, no row rules — because there is no global `table` rule in the
+  // shared CSS. `.tds-table` is also what makes it scroll on a phone instead
+  // of being clipped by `body { overflow-x: hidden }`, so the class is not
+  // cosmetic: without it the right-hand columns are unreachable there.
+  for (const m of src.matchAll(/<table\b[^>]*>/gs)) {
+    const cls = classOf(m[0]);
+    const line = src.slice(0, m.index).split(/\r?\n/).length;
+    const where = `${relative(ROOT, file).replace(/\\/g, "/")}:${line}`;
+    if (!/\btds-table\b/.test(cls)) findings.push(`${where}  <table> needs "tds-table"`);
+  }
+
+  // `display: flex` on a table cell takes it out of the table's column
+  // algorithm — it stops being a table-cell, so the column silently
+  // desynchronises from its header. Put the flex on a wrapper inside the cell
+  // (`.tds-toolbar` / `.tds-row`, both of which wrap on a narrow screen).
+  for (const m of src.matchAll(/<(td|th)\b[^>]*>/gs)) {
+    const cls = classOf(m[0]);
+    const line = src.slice(0, m.index).split(/\r?\n/).length;
+    const where = `${relative(ROOT, file).replace(/\\/g, "/")}:${line}`;
+    if (/\bflex\b|\bgrid\b/.test(cls)) {
+      findings.push(`${where}  <${m[1]}> must not be flex/grid — wrap the contents instead`);
+    }
+  }
 }
 
 if (findings.length) {
-  console.error(`\n${findings.length} control(s) bypass the shared primitives:\n`);
+  console.error(`\n${findings.length} element(s) bypass the shared primitives:\n`);
   for (const f of findings) console.error(`  ${f}`);
   console.error("\nSee tds-shared/styles/primitives.css. `.btn` carries the geometry and");
-  console.error("`.btn-*` only the colour — BOTH classes are required.\n");
+  console.error("`.btn-*` only the colour — BOTH classes are required.");
+  console.error("NOTE: this is a regex scan, so a tag name written inside a COMMENT");
+  console.error("counts as markup. Name the element in prose instead.\n");
   process.exit(1);
 }
 console.log(`lint-primitives: ${files.length} file(s) clean`);
