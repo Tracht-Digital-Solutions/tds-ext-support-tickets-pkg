@@ -20,9 +20,18 @@ type Hit = { status?: number; body?: unknown };
 let handlers: Array<(url: string, init?: RequestInit) => Hit | undefined> = [];
 let calls: Array<{ url: string; method: string; body: unknown; raw: BodyInit | null | undefined }> = [];
 
+
+/**
+ * Path + query of a request. The island calls an ABSOLUTE URL now (via
+ * `apiFetch`); a relative one would hit the product's own static host and come
+ * back as SPA-fallback HTML with a 200. Matching on the path keeps the route
+ * matchers below anchored.
+ */
+const pathOf = (url: string) => String(url).replace(/^https?:\/\/[^/]+/i, "");
+
 function respond(match: RegExp, body: unknown, status = 200, method?: string) {
   handlers.unshift((url, init) => {
-    if (!match.test(url)) return undefined;
+    if (!match.test(pathOf(url))) return undefined;
     if (method && (init?.method ?? "GET") !== method) return undefined;
     return { status, body };
   });
@@ -76,7 +85,7 @@ const DETAIL = {
 async function renderBoard(tickets: unknown[] = [ROW]) {
   respond(/^\/tickets$/, { tickets });
   render(<TicketBoard />);
-  await waitFor(() => expect(calls.some((c) => c.url === "/tickets")).toBe(true));
+  await waitFor(() => expect(calls.some((c) => pathOf(c.url) === "/tickets")).toBe(true));
 }
 
 /** Open ticket 7's detail view. */
@@ -157,7 +166,7 @@ describe("the ticket list", () => {
 describe("opening a ticket", () => {
   it("fetches that ticket's detail by id", async () => {
     await openDetail();
-    expect(calls.some((c) => c.url === "/tickets/7")).toBe(true);
+    expect(calls.some((c) => pathOf(c.url) === "/tickets/7")).toBe(true);
   });
 
   it("renders the description and status", async () => {
@@ -180,14 +189,14 @@ describe("opening a ticket", () => {
     // The status may have changed while the detail was open.
     const u = await openDetail();
     await u.click(screen.getByRole("button", { name: "← Zurück" }));
-    await waitFor(() => expect(calls.filter((c) => c.url === "/tickets" && c.method === "GET")).toHaveLength(2));
+    await waitFor(() => expect(calls.filter((c) => pathOf(c.url) === "/tickets" && c.method === "GET")).toHaveLength(2));
   });
 
   it("stays on the list when the detail request fails", async () => {
     await renderBoard();
     respond(/^\/tickets\/7$/, {}, 500);
     await user().click(await screen.findByRole("button", { name: "Drucker geht nicht" }));
-    await waitFor(() => expect(calls.some((c) => c.url === "/tickets/7")).toBe(true));
+    await waitFor(() => expect(calls.some((c) => pathOf(c.url) === "/tickets/7")).toBe(true));
     expect(screen.queryByRole("heading", { name: "Drucker geht nicht" })).toBeNull();
   });
 });
@@ -246,7 +255,7 @@ describe("replying", () => {
     await u.type(screen.getByPlaceholderText("Antwort schreiben …"), "  Danke!  ");
     await u.click(screen.getByRole("button", { name: "Senden" }));
     await waitFor(() => expect(posts()).toHaveLength(1));
-    expect(posts()[0]!.url).toBe("/tickets/7/comments");
+    expect(pathOf(posts()[0]!.url)).toBe("/tickets/7/comments");
     expect(posts()[0]!.body).toEqual({ body: "Danke!" });
   });
 
@@ -257,7 +266,7 @@ describe("replying", () => {
     await waitFor(() =>
       expect((screen.getByPlaceholderText("Antwort schreiben …") as HTMLTextAreaElement).value).toBe(""),
     );
-    expect(calls.filter((c) => c.url === "/tickets/7" && c.method === "GET").length).toBeGreaterThan(1);
+    expect(calls.filter((c) => pathOf(c.url) === "/tickets/7" && c.method === "GET").length).toBeGreaterThan(1);
   });
 
   it("sends JSON with the content type the API expects", async () => {
@@ -290,8 +299,8 @@ describe("attachments", () => {
     const file = new File(["hallo"], "notiz.txt", { type: "text/plain" });
     await u.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
 
-    await waitFor(() => expect(posts().some((c) => c.url === "/tickets/7/attachments")).toBe(true));
-    const upload = posts().find((c) => c.url === "/tickets/7/attachments")!;
+    await waitFor(() => expect(posts().some((c) => pathOf(c.url) === "/tickets/7/attachments")).toBe(true));
+    const upload = posts().find((c) => pathOf(c.url) === "/tickets/7/attachments")!;
     expect(upload.raw).toBeInstanceOf(FormData);
     expect((upload.raw as FormData).get("file")).toBe(file);
   });
@@ -303,7 +312,7 @@ describe("attachments", () => {
       new File(["x"], "a.txt", { type: "text/plain" }),
     );
     await waitFor(() =>
-      expect(calls.filter((c) => c.url === "/tickets/7" && c.method === "GET").length).toBeGreaterThan(1),
+      expect(calls.filter((c) => pathOf(c.url) === "/tickets/7" && c.method === "GET").length).toBeGreaterThan(1),
     );
   });
 
@@ -358,7 +367,7 @@ describe("creating a ticket", () => {
     await u.type(screen.getByPlaceholderText("Beschreibung"), "Details");
     await u.click(screen.getByRole("button", { name: "Ticket erstellen" }));
     await waitFor(() => expect(posts()).toHaveLength(1));
-    expect(posts()[0]!.url).toBe("/tickets");
+    expect(pathOf(posts()[0]!.url)).toBe("/tickets");
     expect(posts()[0]!.body).toEqual({
       subject: "Neu",
       description: "Details",
@@ -385,7 +394,7 @@ describe("creating a ticket", () => {
     await u.type(screen.getByPlaceholderText("Beschreibung"), "Details");
     await u.click(screen.getByRole("button", { name: "Ticket erstellen" }));
     await waitFor(() => expect(screen.queryByPlaceholderText("Betreff")).toBeNull());
-    expect(calls.filter((c) => c.url === "/tickets" && c.method === "GET")).toHaveLength(2);
+    expect(calls.filter((c) => pathOf(c.url) === "/tickets" && c.method === "GET")).toHaveLength(2);
   });
 
   it("keeps the form open when the create fails, so the text is not lost", async () => {

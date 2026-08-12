@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Spinner, toast } from "@tracht-digital-solutions/tds-shared/components";
+import { apiFetch } from "@tracht-digital-solutions/tds-shared/api";
 
 type Toggles = Record<string, boolean>;
 
@@ -9,8 +10,7 @@ const LABELS: Record<string, string> = {
   notify_customer_on_reply: "Kunde bei Antwort benachrichtigen",
 };
 
-const api = (path: string, init?: RequestInit) =>
-  fetch(path, { credentials: "include", ...init });
+const api = apiFetch;
 
 /**
  * Admin notification toggles (checkpoint-4). Reads/writes

@@ -8,6 +8,7 @@ import { Spinner, toast } from "@tracht-digital-solutions/tds-shared/components"
 // known aliases (violet -> cat-violet, red -> danger, …) and falls back to
 // `neutral`, so the class it returns always exists in primitives.css.
 import { resolveChipVariant } from "@tracht-digital-solutions/tds-shared/design";
+import { apiFetch } from "@tracht-digital-solutions/tds-shared/api";
 
 interface TicketRow {
   id: number;
@@ -38,8 +39,7 @@ interface TicketDetail extends TicketRow {
   attachments: Attachment[];
 }
 
-const api = (path: string, init?: RequestInit) =>
-  fetch(path, { credentials: "include", ...init });
+const api = apiFetch;
 
 /**
  * Portal ticket board (checkpoint-2): the customer's list + detail + comment
