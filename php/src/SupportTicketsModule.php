@@ -14,6 +14,7 @@ use Tds\Ext\SupportTickets\Domain\TicketSettings;
 use Tds\Ext\SupportTickets\Service\ImapTicketIngest;
 use Tds\Ext\SupportTickets\Support\AttachmentStorage;
 use Tds\Frontend\Contract\AbstractModule;
+use Tds\Frontend\Contract\ApiDocSource;
 use Tds\Frontend\Contract\Mailer;
 use Tds\Frontend\Contract\PermissionDef;
 use Tds\Frontend\Contract\UserContext;
@@ -30,7 +31,7 @@ use Tds\Frontend\Contract\UserContext;
  * Still to port (later checkpoints): status registry CRUD, attachments, richer
  * notifications + customer directory, IMAP + contact-form ingest.
  */
-final class SupportTicketsModule extends AbstractModule
+final class SupportTicketsModule extends AbstractModule implements ApiDocSource
 {
     public function id(): string
     {
@@ -556,5 +557,16 @@ final class SupportTicketsModule extends AbstractModule
             ->withHeader('Content-Type', (string) $a['mime_type'])
             ->withHeader('Content-Disposition', 'attachment; filename="' . $a['filename'] . '"')
             ->withHeader('Content-Length', (string) $a['size_bytes']);
+    }
+
+    /**
+     * Route documentation for the admin frontend's API reference. Kept in its
+     * own file so the prose does not sit in the middle of the wiring.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function apiDocs(): array
+    {
+        return require __DIR__ . '/../docs/api.php';
     }
 }
