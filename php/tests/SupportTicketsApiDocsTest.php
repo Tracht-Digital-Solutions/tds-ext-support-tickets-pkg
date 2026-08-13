@@ -88,6 +88,13 @@ final class SupportTicketsApiDocsTest extends TestCase
     {
         // A `{id}` nobody explains is the most common gap: the pattern shows it
         // exists, the reference has to say what goes in it.
+        //
+        // Collected and asserted ONCE rather than inside the loop: a module
+        // whose routes carry no placeholder would otherwise perform no
+        // assertion at all — which reads as "checked" but is not (and trips
+        // phpunit's failOnRisky). This also reports every gap instead of
+        // stopping at the first.
+        $missing = [];
         foreach ((new SupportTicketsModule())->apiDocs() as $doc) {
             preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)/', (string) $doc['pattern'], $matches);
             $documented = array_column(
@@ -95,12 +102,12 @@ final class SupportTicketsApiDocsTest extends TestCase
                 'name',
             );
             foreach ($matches[1] as $placeholder) {
-                self::assertContains(
-                    $placeholder,
-                    $documented,
-                    "Pfadparameter \"{$placeholder}\" undokumentiert: {$doc['method']} {$doc['pattern']}",
-                );
+                if (!in_array($placeholder, $documented, true)) {
+                    $missing[] = "{$doc['method']} {$doc['pattern']} → {$placeholder}";
+                }
             }
         }
+
+        self::assertSame([], $missing, 'Undokumentierte Pfadparameter');
     }
 }
