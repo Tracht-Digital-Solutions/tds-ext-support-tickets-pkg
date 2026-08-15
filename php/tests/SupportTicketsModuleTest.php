@@ -216,6 +216,26 @@ final class SupportTicketsModuleTest extends TestCase
         self::assertSame(403, $this->get($app, '/admin/tickets/imap-test')->getStatusCode());
     }
 
+    public function testImapStatusRequiresAdmin(): void
+    {
+        $app = $this->appWith(new FakeUser(perms: ['tickets:read']));
+        self::assertSame(403, $this->get($app, '/admin/tickets/imap')->getStatusCode());
+    }
+
+    public function testImapStatusReportsAnUnconfiguredMailboxWithoutADatabase(): void
+    {
+        // The settings section has to render on a host that has neither a
+        // mailbox nor a DB yet — that is the state before go-live, and a 500
+        // there would look like a broken panel rather than a pending setup.
+        putenv('IMAP_HOST');
+        $res = $this->get($this->appWith(new FakeUser(admin: true)), '/admin/tickets/imap');
+        self::assertSame(200, $res->getStatusCode());
+        $body = json_decode((string) $res->getBody(), true);
+        self::assertFalse($body['configured']);
+        self::assertSame('none', $body['source']);
+        self::assertSame('reply', $body['mode']);
+    }
+
     /** @param array<string,mixed> $body */
     private function post(\Slim\App $app, string $path, array $body): \Psr\Http\Message\ResponseInterface
     {

@@ -178,6 +178,71 @@ final class TicketRepository
         return (int) $this->pdo->lastInsertId();
     }
 
+    /**
+     * Open a ticket from an inbound email. The mirror of
+     * {@see createContactTicket()} for the IMAP channel: the sender is usually
+     * not a portal user, so `created_by_user_id` stays NULL and the identity
+     * lives in `from_*`. `customer_id` is set only when the sender could be
+     * bound to a company ({@see findCompanyIdByEmail()}) — with it the ticket
+     * also shows up in that company's portal, without it it is admin-only.
+     *
+     * `email_message_id` is what makes a re-delivered mail a duplicate rather
+     * than a second ticket, and what lets the sender's reply thread back onto
+     * this one via References/In-Reply-To.
+     */
+    public function createEmailTicket(
+        ?int $customerId,
+        string $subject,
+        string $body,
+        string $fromEmail,
+        ?string $fromName,
+        string $messageId,
+    ): int {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO ticket (customer_id, status_id, subject, description, priority, type,
+                                 created_by_type, created_by_user_id, source, email_message_id,
+                                 from_name, from_email)
+             VALUES (:cid, :sid, :subject, :description, \'normal\', \'question\', \'customer\', NULL,
+                     \'email\', :mid, :name, :email)'
+        );
+        $stmt->execute([
+            ':cid' => $customerId,
+            ':sid' => $this->defaultStatusId(),
+            ':subject' => mb_substr($subject, 0, 200),
+            ':description' => mb_substr($body, 0, 10000),
+            ':mid' => $messageId !== '' ? $messageId : null,
+            ':name' => $fromName === null || $fromName === '' ? null : mb_substr($fromName, 0, 200),
+            ':email' => mb_substr(strtolower($fromEmail), 0, 254),
+        ]);
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    /**
+     * Company id whose directory entry carries this address, or null.
+     *
+     * The `company` table belongs to **tds-ext-customers-pkg**, which shares this
+     * database but is not composed into every product (the customer portal ships
+     * support-tickets without it). A missing table is therefore a normal state,
+     * not a fault — hence the catch. Matching is on the full address only: a
+     * domain match would hand a shared mailbox at a freemail provider to whoever
+     * registered that domain first.
+     */
+    public function findCompanyIdByEmail(string $email): ?int
+    {
+        $email = strtolower(trim($email));
+        if ($email === '') {
+            return null;
+        }
+        try {
+            $stmt = $this->pdo->prepare('SELECT id FROM company WHERE LOWER(email) = :e LIMIT 1');
+            $stmt->execute([':e' => $email]);
+            $id = $stmt->fetchColumn();
+            return $id === false ? null : (int) $id;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     // --- email ingest (threading) ---------------------------------------------
 
     /** True when a mail's Message-ID was already stored (dedupe re-delivery). */

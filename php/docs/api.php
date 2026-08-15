@@ -179,15 +179,18 @@ return [
             . '`proc_open` erlaubt — es gibt also keinen Hintergrundprozess, der das '
             . 'selbst täte. Gelesen wird über Sockets (`webklex/php-imap`), nicht über '
             . '`ext-imap`. Antworten auf eine bestehende Ticket-Mail werden an das '
-            . 'Ticket gehängt statt ein neues zu öffnen.',
+            . 'Ticket gehängt; alles andere legt ein neues Ticket an, sofern die '
+            . 'Annahme-Regel (Einstellungen → E-Mail-Eingang) den Absender zulässt. '
+            . 'Zugangsdaten und Regel stehen in den Panel-Einstellungen, ersatzweise '
+            . 'in `IMAP_*` der `.env`.',
         'auth' => 'token',
         'params' => [
             ['in' => 'query', 'name' => 'token', 'type' => 'string', 'description' => 'Das Ingest-Token. Alternativ als Header `X-Ingest-Token`.'],
         ],
         'responses' => [
-            ['status' => 200, 'description' => 'Bericht über den Abruf (verarbeitete und übersprungene Nachrichten).'],
+            ['status' => 200, 'description' => 'Bericht über den Abruf: `processed`, `created`, `appended`, `skipped`, die geltende Regel (`mode`) und `polled` — letzteres unterscheidet „nichts Neues" von „gar nicht erst verbunden".'],
             ['status' => 401, 'description' => 'Token fehlt oder stimmt nicht.'],
-            ['status' => 503, 'description' => '`INGEST_TOKEN` nicht gesetzt.'],
+            ['status' => 503, 'description' => 'Kein Ingest-Token hinterlegt — die Route ist damit abgeschaltet.'],
         ],
     ],
     [
@@ -316,10 +319,31 @@ return [
         'tag' => 'Verwaltung',
         'summary' => 'IMAP-Verbindung prüfen',
         'description' => 'Diagnose vor dem ersten Abruf. Eine abgelehnte Anmeldung ist ein '
-            . 'Befund, kein Fehler der Anfrage — die Antwort trägt ihn als Ergebnis.',
+            . 'Befund, kein Fehler der Anfrage — die Antwort trägt ihn als Ergebnis. '
+            . 'Geprüft wird die **gespeicherte** Konfiguration, nicht das noch nicht '
+            . 'gespeicherte Formular.',
         'auth' => 'admin',
         'responses' => [
             ['status' => 200, 'description' => 'Das Prüfergebnis samt Fehlermeldung, falls die Verbindung scheitert.'],
+            ['status' => 401, 'description' => 'Keine Sitzung.'],
+            ['status' => 403, 'description' => 'Angemeldet, aber kein Admin.'],
+        ],
+    ],
+    [
+        'method' => 'GET',
+        'pattern' => '/admin/tickets/imap',
+        'tag' => 'Verwaltung',
+        'summary' => 'Wirksame Postfach-Konfiguration',
+        'description' => 'Was der Abruf tatsächlich verwendet — inklusive `source` '
+            . '(`db` = Panel-Einstellungen, `env` = `IMAP_*` der `.env` des Hosts, '
+            . '`none` = nicht eingerichtet) und der geltenden Annahme-Regel. Nötig, '
+            . 'weil `GET /admin/settings/support-tickets` nur zeigt, was gespeichert '
+            . 'ist: auf einem Host, der sein Postfach aus der `.env` bezieht, wäre das '
+            . 'ein leeres Formular über einer laufenden Anbindung. Enthält keine '
+            . 'Geheimnisse, nur ob Passwort und Token hinterlegt sind.',
+        'auth' => 'admin',
+        'responses' => [
+            ['status' => 200, 'description' => 'Host, Port, Verschlüsselung, Ordner, Benutzer, Regel, Allowlist und die Herkunft der Konfiguration.'],
             ['status' => 401, 'description' => 'Keine Sitzung.'],
             ['status' => 403, 'description' => 'Angemeldet, aber kein Admin.'],
         ],

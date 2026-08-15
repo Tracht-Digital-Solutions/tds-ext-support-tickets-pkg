@@ -4,22 +4,24 @@ declare(strict_types=1);
 namespace Tds\Ext\SupportTickets\Service;
 
 use Tds\Ext\SupportTickets\Domain\TicketRepository;
+use Tds\Ext\SupportTickets\Notifier;
 use Tds\Ext\SupportTickets\Support\AttachmentStorage;
 use Webklex\PHPIMAP\ClientManager;
 
 /**
- * Inbound IMAP mail → ticket replies (ported from tds-customer-api). One poll()
+ * Inbound IMAP mail → tickets (ported from tds-customer-api). One poll()
  * connects to the mailbox, fetches UNSEEN messages and, per message: dedupes on
- * Message-ID, and **threads a reply onto an existing ticket the sender owns**
- * (a `#<id>` subject marker or an In-Reply-To/References hit on a stored
- * Message-ID whose ticket carries the sender's `from_email`).
+ * Message-ID, **threads a reply onto an existing ticket the sender owns** (a
+ * `#<id>` subject marker or an In-Reply-To/References hit on a stored
+ * Message-ID whose ticket carries the sender's `from_email`), and otherwise
+ * **opens a new ticket if the ingest policy allows this sender**.
  *
- * ADAPTATION vs customer-api: that service also matched senders against
- * `customer.email` and opened new `source=email` tickets for known customers.
- * This extension has no customer directory, so it can only THREAD onto tickets
- * that carry a `from_email` (contact/email tickets); mail from a sender with no
- * such ticket is skipped (anti-spam). Opening new tickets for arbitrary senders
- * awaits the customer-directory port.
+ * That last step is what {@see ImapConfig} governs. It used to be absent: every
+ * mail that was not a reply was dropped with a log line, so an inbox could be
+ * fully configured and still never produce a single ticket. Opening one for
+ * *anybody* is not a safe default either — an address that receives mail also
+ * receives spam — so the policy defaults to `reply` (the old behaviour) and
+ * widening it (`allowlist`, `all`) is an explicit choice in the panel.
  *
  * webklex/php-imap talks IMAP over stream sockets (no ext-imap / proc_open), so
  * it runs in-process. There is no worker on the prod host: poll() is driven by
@@ -34,18 +36,14 @@ final class ImapTicketIngest
     public function __construct(
         private readonly TicketRepository $tickets,
         private readonly AttachmentStorage $attachments,
-        private readonly string $host,
-        private readonly string $port,
-        private readonly string $user,
-        private readonly string $pass,
-        private readonly string $security,
-        private readonly string $folder,
+        private readonly ImapConfig $config,
+        private readonly ?Notifier $notifier = null,
     ) {
     }
 
     public function isConfigured(): bool
     {
-        return $this->host !== '' && $this->user !== '';
+        return $this->config->isConfigured();
     }
 
     /** @return array{ok:bool,error?:string} */
@@ -56,7 +54,7 @@ final class ImapTicketIngest
         }
         try {
             $client = $this->connect();
-            $client->getFolder($this->folder !== '' ? $this->folder : 'INBOX');
+            $client->getFolder($this->config->folder);
             $client->disconnect();
             return ['ok' => true];
         } catch (\Throwable $e) {
@@ -64,16 +62,29 @@ final class ImapTicketIngest
         }
     }
 
-    /** @return array{processed:int,created:int,appended:int,skipped:int} */
+    /**
+     * @return array{processed:int,created:int,appended:int,skipped:int,mode:string,polled:bool}
+     */
     public function poll(): array
     {
-        $stats = ['processed' => 0, 'created' => 0, 'appended' => 0, 'skipped' => 0];
-        if (!$this->isConfigured()) {
+        $stats = [
+            'processed' => 0,
+            'created' => 0,
+            'appended' => 0,
+            'skipped' => 0,
+            'mode' => $this->config->mode,
+            // Distinguishes "nothing new" from "never even connected" — without
+            // it an unconfigured or switched-off mailbox reports an all-zero
+            // success, which reads like a working ingest with an empty inbox.
+            'polled' => false,
+        ];
+        if (!$this->config->isPollingEnabled()) {
             return $stats;
         }
+        $stats['polled'] = true;
         $client = $this->connect();
         try {
-            $folder = $client->getFolder($this->folder !== '' ? $this->folder : 'INBOX');
+            $folder = $client->getFolder($this->config->folder);
             $messages = $folder->messages()->unseen()->limit(self::MAX_PER_POLL)->get();
             foreach ($messages as $message) {
                 $stats['processed']++;
@@ -95,7 +106,7 @@ final class ImapTicketIngest
     /**
      * Persist one normalised message. Returns 'created' | 'appended' | 'skipped'.
      *
-     * @param array{message_id:string,from:string,subject:string,references:list<string>,body:string,attachments:list<array{filename:string,bytes:string,mime:string}>} $mail
+     * @param array{message_id:string,from:string,from_name?:string,subject:string,references:list<string>,body:string,attachments:list<array{filename:string,bytes:string,mime:string}>} $mail
      */
     public function handle(array $mail): string
     {
@@ -121,10 +132,35 @@ final class ImapTicketIngest
             return 'appended';
         }
 
-        // Unknown sender with no owned ticket → skipped (opening a new ticket for
-        // an arbitrary sender needs the customer directory / an allowlist).
-        error_log('[ingest] skip: no owned ticket for ' . $from);
-        return 'skipped';
+        // No thread to append to: the ingest policy decides whether this sender
+        // may open one. `reply` (the default) never does — that keeps a mailbox
+        // switched on for support replies from becoming a spam funnel.
+        if (!$this->config->opensTicketFor($from)) {
+            error_log('[ingest] skip: policy "' . $this->config->mode . '" opens no ticket for ' . $from);
+            return 'skipped';
+        }
+
+        $companyId = $this->config->matchCompany ? $this->tickets->findCompanyIdByEmail($from) : null;
+        $subject = self::cleanSubject($mail['subject']);
+        $newId = $this->tickets->createEmailTicket(
+            $companyId,
+            $subject,
+            $body,
+            $from,
+            self::optional($mail['from_name'] ?? ''),
+            $messageId,
+        );
+        // Attachments are bucketed by company on disk; an unbound sender uses
+        // the shared 0 bucket, same as a contact-form ticket.
+        $this->storeAttachments($companyId ?? 0, $newId, null, $mail['attachments']);
+        $this->notifier?->onNewTicket($newId, $subject);
+        return 'created';
+    }
+
+    private static function optional(string $value): ?string
+    {
+        $v = trim($value);
+        return $v === '' ? null : $v;
     }
 
     /** @param list<array{filename:string,bytes:string,mime:string}> $atts */
@@ -152,12 +188,12 @@ final class ImapTicketIngest
     private function connect(): \Webklex\PHPIMAP\Client
     {
         $client = (new ClientManager())->make([
-            'host' => $this->host,
-            'port' => (int) ($this->port !== '' ? $this->port : 993),
+            'host' => $this->config->host,
+            'port' => $this->config->port,
             'encryption' => $this->encryption(),
             'validate_cert' => true,
-            'username' => $this->user,
-            'password' => $this->pass,
+            'username' => $this->config->user,
+            'password' => $this->config->password,
             'protocol' => 'imap',
         ]);
         $client->connect();
@@ -166,22 +202,26 @@ final class ImapTicketIngest
 
     private function encryption(): string|false
     {
-        return match ($this->security) {
-            'ssl' => 'ssl',
-            'tls' => 'tls',
+        return match ($this->config->security) {
+            ImapConfig::SECURITY_SSL => 'ssl',
+            ImapConfig::SECURITY_TLS => 'tls',
             default => false,
         };
     }
 
     /**
-     * @return array{message_id:string,from:string,subject:string,references:list<string>,body:string,attachments:list<array{filename:string,bytes:string,mime:string}>}
+     * @return array{message_id:string,from:string,from_name:string,subject:string,references:list<string>,body:string,attachments:list<array{filename:string,bytes:string,mime:string}>}
      */
     private function normalize(\Webklex\PHPIMAP\Message $message): array
     {
         $from = '';
+        $fromName = '';
         try {
             $addr = $message->getFrom()->first();
             $from = strtolower(trim((string) ($addr->mail ?? '')));
+            // The display name is what makes an email ticket readable in the
+            // list; without it every row is an address.
+            $fromName = trim((string) ($addr->personal ?? ''));
         } catch (\Throwable) {
             // no parsable From → unknown sender downstream
         }
@@ -205,6 +245,7 @@ final class ImapTicketIngest
         return [
             'message_id' => self::normalizeMessageId((string) $message->getMessageId()),
             'from' => $from,
+            'from_name' => $fromName,
             'subject' => (string) $message->getSubject(),
             'references' => self::extractMessageIds(
                 trim((string) $message->getInReplyTo()) . ' ' . trim((string) $message->getReferences())

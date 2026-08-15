@@ -23,12 +23,39 @@ them. Built on the frontend platform's core services:
 - **Frontend:** nav "Tickets" → `/tickets`, the ticket list island, the open-count
   dashboard widget, DE/EN i18n.
 
+## E-Mail-Eingang (IMAP)
+
+Incoming mail becomes tickets. Configure it in the admin frontend under
+**Einstellungen → Support-Tickets → E-Mail-Eingang (IMAP)** — server, port,
+encryption, folder, user, password — and test it there ("Verbindung testen").
+Settings are stored in the core's runtime settings store (secrets AES-256-GCM
+encrypted); the host's `IMAP_*` env vars remain a fallback, and
+`GET /admin/tickets/imap` reports which of the two is actually in use.
+
+**Die Annahme-Regel** (`ingest_mode`) decides what a mail that belongs to no
+existing ticket becomes:
+
+| Regel | Wirkung |
+|---|---|
+| `off` | Das Postfach wird nicht abgerufen. |
+| `reply` *(Standard)* | Antworten landen am passenden Ticket. Alles andere wird verworfen. |
+| `allowlist` | Zusätzlich: Mails erlaubter Adressen/Domains öffnen ein neues Ticket. |
+| `all` | Jede unbekannte Mail öffnet ein Ticket — auch Spam. |
+
+Replies always thread (Message-ID dedupe, `#<id>` subject marker or
+In-Reply-To/References), regardless of the rule. With **"Absender einer bekannten
+Firma zuordnen"** on, a sender whose address matches a company in the directory
+gets their ticket bound to that company, which also makes it visible in that
+company's portal.
+
+Polling happens on demand: **"Jetzt abrufen"** in the settings section, or
+`POST /tickets/ingest?token=…` from an external scheduler (the production host
+has no cron and no `proc_open`). The token is set in the same section.
+
 ## Still to port (later checkpoints)
 
 Status-registry CRUD + colour tones editor, attachments, the full board UI
-(detail view + comment thread + new-ticket form), richer notifications + a
-customer directory (customer-email recipients), and the **IMAP + contact-form
-ingest** channels.
+(detail view + comment thread + new-ticket form), and richer notifications.
 
 ## Develop
 

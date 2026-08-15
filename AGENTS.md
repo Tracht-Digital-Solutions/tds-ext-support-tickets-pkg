@@ -117,23 +117,58 @@ state, so the guard is unreachable from the UI. It is defence in depth, kept.
   with `from_*` details + a validated payload (name≥2, valid email, message≥20).
 - **CP5b:** IMAP ingest — `Service\ImapTicketIngest` (webklex/php-imap over sockets,
   no ext-imap; needs **ext-zip** → enabled in the CI setup-php). `POST /tickets/ingest`
-  (INGEST_TOKEN, external scheduler) + admin `POST /admin/tickets/ingest` ("Jetzt
+  (ingest token, external scheduler) + admin `POST /admin/tickets/ingest` ("Jetzt
   abrufen") + `GET /admin/tickets/imap-test`. Dedupe on Message-ID, thread replies onto
   an owned ticket (`#<id>` subject / In-Reply-To/References match a stored Message-ID
-  whose ticket carries the sender's `from_email`). **Adaptation:** with no customer
-  directory it only threads `from_email`-bearing tickets; mail from an unknown sender is
-  skipped (opening new tickets for arbitrary senders needs the customer directory).
-  Pure parsing helpers are unit-tested (no mailbox); webklex loads only on connect().
+  whose ticket carries the sender's `from_email`). Pure parsing helpers are unit-tested
+  (no mailbox); webklex loads only on connect().
 - **CP6:** portal-customer notification recipient — a portal ticket now stores the
   creator's `UserContext::email()` (contract 1.2.0) in `from_email`, so owner-reply +
   status-change emails reach portal customers (previously only contact/email tickets had
   a recipient).
-- **TODO (next):** a customer directory so IMAP can open NEW tickets for unknown senders
-  safely (threading already works); then the contact-tickets split.
+- **CP7 (2026-08-15):** the mailbox became **panel-configurable**, and the ingest can
+  finally **open** tickets. Two halves, both in `Service\ImapConfig`:
+  - **Configuration is DB-first with an env fallback** (`SettingsStore` namespace
+    `support-tickets`, section *Einstellungen → Support-Tickets → E-Mail-Eingang (IMAP)*,
+    island `islands/ImapSettings.tsx`), the same pattern as the base's SMTP settings.
+    Before this the mailbox was `IMAP_*`-only — i.e. only settable by editing a file on
+    a Plesk host without SSH, which is why a shipped ingest was never switched on.
+    `GET /admin/tickets/imap` reports what the ingest ACTUALLY uses incl.
+    `source: db|env|none`, because the settings namespace alone would show an empty form
+    on a host whose mailbox comes from its `.env` — and the first "fix" would overwrite
+    a working mailbox. The password + ingest token are secrets (masked, blank = keep).
+  - **`ingest_mode` decides what an unthreaded mail becomes:** `off` (no polling) ·
+    `reply` (thread only — **the default**, i.e. the pre-CP7 behaviour) · `allowlist`
+    (addresses and/or whole domains, matched on the domain boundary) · `all`. Opening a
+    ticket for anyone is not a safe default: an address that receives mail also receives
+    spam. A created ticket is `source='email'`, `from_name`/`from_email` from the
+    envelope, subject via `cleanSubject()`, attachments stored, `Notifier::onNewTicket()`.
+  - `ingest_match_company` (default on) binds the sender to a company when
+    `company.email` matches exactly, which also makes the ticket visible in that
+    company's portal. That table belongs to **tds-ext-customers-pkg**, which is not
+    composed into the customer product — a missing table is a normal state, so
+    `findCompanyIdByEmail()` catches and returns null. Full address only: a domain match
+    would hand a freemail mailbox to whoever registered the domain first.
+  - `poll()` returns `mode` + **`polled`** alongside the counters. An all-zero report
+    from a mailbox that was never contacted reads exactly like an empty inbox; `polled`
+    is what tells "nothing new" from "not configured / switched off".
+  - **`ImapConfig` is deliberately NOT a container entry.** PHP-DI autowires unknown
+    classes, so a value object with a private constructor resolves to "class is not
+    instantiable" in every container without an explicit definition — which is every
+    isolated test. `SupportTicketsModule::imapConfig()` resolves it per request instead,
+    which also means a panel save takes effect on the very next request.
+  - **`IMAP_PASSWORD` is now read, with `IMAP_PASS` kept as an alias.** This module read
+    `IMAP_PASS` while every `.env.example` and the installer documented `IMAP_PASSWORD` —
+    a host following the docs configured a mailbox the module never authenticated to.
+- **TODO (next):** the contact-tickets split.
 
-Env (host-side): `TICKET_ADMIN_EMAIL`, `TICKET_UPLOAD_DIR` (unset → uploads 503),
-`INGEST_TOKEN` (unset → ingest 503), `IMAP_HOST`/`IMAP_PORT`/`IMAP_USER`/`IMAP_PASS`/
-`IMAP_SECURITY` (ssl|tls|none)/`IMAP_FOLDER` (unset host/user → poll no-ops).
+Env (host-side, all now only a FALLBACK behind the panel settings):
+`TICKET_ADMIN_EMAIL`, `TICKET_UPLOAD_DIR` (unset → uploads 503), `INGEST_TOKEN`
+(unset and none stored → ingest 503), `IMAP_HOST`/`IMAP_PORT`/`IMAP_USER`/
+`IMAP_PASSWORD` (alias `IMAP_PASS`)/`IMAP_SECURITY` (ssl|tls|none)/`IMAP_FOLDER`
+(unset host/user → poll no-ops), `TICKET_INGEST_MODE`, `TICKET_INGEST_MATCH_COMPANY`.
+The connection fields follow the **host**, all or nothing: a panel-configured mailbox
+never takes single fields from the env, or a login failure has no explicable cause.
 
 ## After a change
 

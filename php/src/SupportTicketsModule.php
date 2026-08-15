@@ -11,12 +11,14 @@ use Slim\App;
 use Slim\Psr7\Factory\StreamFactory;
 use Tds\Ext\SupportTickets\Domain\TicketRepository;
 use Tds\Ext\SupportTickets\Domain\TicketSettings;
+use Tds\Ext\SupportTickets\Service\ImapConfig;
 use Tds\Ext\SupportTickets\Service\ImapTicketIngest;
 use Tds\Ext\SupportTickets\Support\AttachmentStorage;
 use Tds\Frontend\Contract\AbstractModule;
 use Tds\Frontend\Contract\ApiDocSource;
 use Tds\Frontend\Contract\Mailer;
 use Tds\Frontend\Contract\PermissionDef;
+use Tds\Frontend\Contract\SettingsStore;
 use Tds\Frontend\Contract\UserContext;
 
 /**
@@ -68,12 +70,8 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
             $c->set(ImapTicketIngest::class, static fn ($c) => new ImapTicketIngest(
                 $c->get(TicketRepository::class),
                 $c->get(AttachmentStorage::class),
-                (string) (getenv('IMAP_HOST') ?: ''),
-                (string) (getenv('IMAP_PORT') ?: ''),
-                (string) (getenv('IMAP_USER') ?: ''),
-                (string) (getenv('IMAP_PASS') ?: ''),
-                (string) (getenv('IMAP_SECURITY') ?: 'ssl'),
-                (string) (getenv('IMAP_FOLDER') ?: 'INBOX'),
+                self::imapConfig($c),
+                $c->get(Notifier::class),
             ));
         }
 
@@ -196,7 +194,7 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
         // categorised type/source='contact' with a NULL customer_id + from_*
         // details. (IMAP ingest — POST /tickets/ingest — lands in CP5b.)
         $app->post('/tickets/contact', function (Request $req, Response $res) use ($c): Response {
-            if (($deny = self::checkIngestToken($req, $res)) !== null) {
+            if (($deny = self::checkIngestToken($req, $res, self::imapConfig($c))) !== null) {
                 return $deny;
             }
             $body = (array) $req->getParsedBody();
@@ -219,7 +217,7 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
         // IMAP poll, driven by an external scheduler (no cron/CLI on the prod
         // host). INGEST_TOKEN-gated; threads inbound replies onto owned tickets.
         $app->post('/tickets/ingest', function (Request $req, Response $res) use ($c): Response {
-            if (($deny = self::checkIngestToken($req, $res)) !== null) {
+            if (($deny = self::checkIngestToken($req, $res, self::imapConfig($c))) !== null) {
                 return $deny;
             }
             return self::json($res, $c->get(ImapTicketIngest::class)->poll());
@@ -342,6 +340,17 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
                 return $deny;
             }
             return self::json($res, $c->get(ImapTicketIngest::class)->testConnection());
+        });
+
+        // What the ingest ACTUALLY uses, which the settings namespace alone
+        // cannot answer: the mailbox may still come from the host's `.env`, and
+        // an empty form on a working host invites "fixing" a mailbox that was
+        // never broken. Carries no secret — only whether one is stored.
+        $app->get('/admin/tickets/imap', function (Request $req, Response $res) use ($c): Response {
+            if (($deny = self::requireAdmin($c->get(UserContext::class), $res)) !== null) {
+                return $deny;
+            }
+            return self::json($res, self::imapConfig($c)->status());
         });
 
         // Ticket settings (notification toggles) — admin.
@@ -483,12 +492,38 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
     }
 
     /**
-     * Verify the shared INGEST_TOKEN (server-to-server auth for the ingest
-     * endpoints). Returns an error response, or null when the token is valid.
+     * The core's settings store if the base bound it (it resolves the contract
+     * interface), else null — so an isolated unit test (no core) falls back to env.
      */
-    private static function checkIngestToken(Request $req, Response $res): ?Response
+    private static function settingsStore(\Psr\Container\ContainerInterface $c): ?SettingsStore
     {
-        $expected = (string) (getenv('INGEST_TOKEN') ?: '');
+        return $c->has(SettingsStore::class) ? $c->get(SettingsStore::class) : null;
+    }
+
+    /**
+     * The mailbox configuration for this request. Deliberately NOT a container
+     * entry: PHP-DI autowires unknown classes, so a value object with a private
+     * constructor resolves to "class is not instantiable" in any container that
+     * has not been given an explicit definition — which is every isolated test.
+     * Resolving it here costs two indexed reads and keeps a panel save effective
+     * on the very next request.
+     */
+    private static function imapConfig(\Psr\Container\ContainerInterface $c): ImapConfig
+    {
+        return ImapConfig::resolve(self::settingsStore($c));
+    }
+
+    /**
+     * Verify the shared ingest token (server-to-server auth for the ingest
+     * endpoints). Returns an error response, or null when the token is valid.
+     *
+     * The token is panel-editable like the rest of the mailbox config and falls
+     * back to `INGEST_TOKEN` from the environment; an unset token leaves the
+     * route switched off rather than open.
+     */
+    private static function checkIngestToken(Request $req, Response $res, ImapConfig $config): ?Response
+    {
+        $expected = $config->ingestToken;
         if ($expected === '') {
             return self::json($res, ['error' => 'INGEST_TOKEN not configured'], 503);
         }
