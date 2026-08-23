@@ -58,7 +58,17 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
     public function register(App $app): void
     {
         $c = $app->getContainer();
-        if ($c !== null && !$c->has(TicketRepository::class)) {
+        // NEVER guard these with `!$c->has(X)`. PHP-DI answers `has()` from its
+        // definition sources, and autowiring is one of them: for any *concrete,
+        // instantiable* class the answer is always true, whether or not anyone
+        // ever bound it. So the guard skipped every binding below and the
+        // container silently autowired instead — invisible for the repositories,
+        // fatal for ImapTicketIngest, whose `$config` argument is built by the
+        // factory here and is not autowirable: `POST /tickets/ingest` answered
+        // 500 with `Entry ImapConfig cannot be resolved: the class is not
+        // instantiable`. The module owns these classes; nothing else defines
+        // them, so binding unconditionally is the correct shape.
+        if ($c !== null) {
             $c->set(TicketRepository::class, static fn ($c) => new TicketRepository($c->get(PDO::class)));
             $c->set(TicketSettings::class, static fn ($c) => new TicketSettings($c->get(PDO::class)));
             $c->set(Notifier::class, static fn ($c) => new Notifier(
