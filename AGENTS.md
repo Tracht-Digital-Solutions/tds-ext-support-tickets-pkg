@@ -88,6 +88,29 @@ contract and the core services.
   `tests/packaging.test.ts` guards it.
 
 ## Tests
+- **CI runs `test:run` since 2026-08-25 — before that, none of these suites
+  ever ran on a runner.** `_build.yml` had type-check, lint:primitives and
+  build. That included the `ApiDocSource` parity test, whose entire job is to
+  fail when a route gains or loses documentation.
+- **The suites used to run against a tds-shared a dozen minors old, and the
+  first honest run cost 30 failures across the twelve shipping extensions.**
+  This package declares tds-shared as a **peer** with a `>=0.19.0` floor, so a
+  fresh install resolved 0.19.0 while every product build composes the current
+  one. Three separate behaviours had moved underneath the tests, and each is
+  worth knowing because a new suite will hit them again:
+  - `apiFetch` consults the host-side runtime config (`/tds-runtime.json`)
+    before it resolves a URL, so `fetch.mock.calls[0]` is that probe, not the
+    endpoint. Call **`primeRuntimeConfig(null)`** in `beforeEach` — the panel
+    products never ship that file (they render `<meta name="tds-api-base">`),
+    so "absent" is also what happens in production.
+  - `apiFetch` is **async**: the request leaves on a later microtask than the
+    render. Reading `mock.calls` on the line after `render(...)` yields
+    `undefined`; `await waitFor(() => expect(fetch).toHaveBeenCalled())` first.
+  - A multipart upload now carries an **empty** `headers` object rather than
+    `undefined`. Identical to the browser — the boundary is still the
+    browser's to set — so assert "no content-type header", never
+    "headers is undefined".
+
 
 `npm run test:run` (vitest; jsdom per-file via a `@vitest-environment` docblock).
 

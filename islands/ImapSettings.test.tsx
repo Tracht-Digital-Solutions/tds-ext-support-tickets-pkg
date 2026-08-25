@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { primeRuntimeConfig } from "@tracht-digital-solutions/tds-shared/api";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ImapSettings from "./ImapSettings";
@@ -88,6 +89,13 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
+
+// apiFetch consults the host-side runtime config (/tds-runtime.json) before it
+// resolves a URL, so without this the first entry in fetch.mock.calls is that
+// probe rather than the endpoint under test. The panel products never ship the
+// file — they render <meta name="tds-api-base"> instead — so "absent" is also
+// what actually happens in production.
+beforeEach(() => primeRuntimeConfig(null));
 
 describe("ImapSettings", () => {
   it("calls the API on an absolute origin, not the product's own host", async () => {

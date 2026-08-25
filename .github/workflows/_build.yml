@@ -83,6 +83,13 @@ jobs:
         # controls had drifted across the packages before this step existed.
         run: npm run lint:primitives
 
+      - name: Test (vitest)
+        # The suites in this repo gated nothing until 2026-08-25: CI ran
+        # type-check, lint:primitives and build, and the tests only ever ran on
+        # somebody's machine. That includes the ApiDocSource parity test, whose
+        # whole job is to fail when a route gains or loses documentation.
+        run: npm run test:run
+
       - name: Build
         run: npm run build
 
