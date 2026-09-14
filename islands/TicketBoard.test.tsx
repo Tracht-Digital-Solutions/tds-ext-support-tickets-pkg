@@ -4,6 +4,7 @@ import { primeRuntimeConfig } from "@tracht-digital-solutions/tds-shared/api";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TicketBoard from "./TicketBoard";
+import { TOAST_EVENT } from "@tracht-digital-solutions/tds-shared/toast";
 
 /**
  * The portal ticket board: list → detail → reply thread, plus the new-ticket
@@ -17,7 +18,7 @@ import TicketBoard from "./TicketBoard";
  * instead, which is stable across both.
  */
 
-type Hit = { status?: number; body?: unknown };
+type Hit = { status?: number; body?: unknown; unreachable?: boolean };
 let handlers: Array<(url: string, init?: RequestInit) => Hit | undefined> = [];
 let calls: Array<{ url: string; method: string; body: unknown; raw: BodyInit | null | undefined }> = [];
 
@@ -38,6 +39,15 @@ function respond(match: RegExp, body: unknown, status = 200, method?: string) {
   });
 }
 
+/** A request that never reaches the API: fetch itself rejects, as it does offline. */
+function unreachable(match: RegExp, method?: string) {
+  handlers.unshift((url, init) => {
+    if (!match.test(pathOf(url))) return undefined;
+    if (method && (init?.method ?? "GET") !== method) return undefined;
+    return { unreachable: true };
+  });
+}
+
 beforeEach(() => {
   handlers = [];
   calls = [];
@@ -53,6 +63,7 @@ beforeEach(() => {
       for (const h of handlers) {
         const hit = h(url, init);
         if (hit) {
+          if (hit.unreachable) throw new TypeError("Failed to fetch");
           const status = hit.status ?? 200;
           return { ok: status >= 200 && status < 300, status, json: async () => hit.body ?? {} } as Response;
         }
@@ -206,6 +217,22 @@ describe("opening a ticket", () => {
     await user().click(await screen.findByRole("button", { name: "Drucker geht nicht" }));
     await waitFor(() => expect(calls.some((c) => pathOf(c.url) === "/tickets/7")).toBe(true));
     expect(screen.queryByRole("heading", { name: "Drucker geht nicht" })).toBeNull();
+  });
+
+  it("says so when the detail request never reaches the API", async () => {
+    // fetch rejects offline; unhandled, the click did nothing and said nothing.
+    const messages: string[] = [];
+    const collect = (e: Event) => messages.push((e as CustomEvent<{ message: string }>).detail.message);
+    window.addEventListener(TOAST_EVENT, collect);
+    try {
+      await renderBoard();
+      unreachable(/^\/tickets\/7$/);
+      await user().click(await screen.findByRole("button", { name: "Drucker geht nicht" }));
+      await waitFor(() => expect(messages.some((m) => m.includes("nicht erreichbar"))).toBe(true));
+      expect(screen.queryByRole("heading", { name: "Drucker geht nicht" })).toBeNull();
+    } finally {
+      window.removeEventListener(TOAST_EVENT, collect);
+    }
   });
 });
 

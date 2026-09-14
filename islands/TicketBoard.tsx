@@ -62,10 +62,16 @@ export default function TicketBoard() {
     loadList();
   }, []);
 
-  const openTicket = (id: number) =>
-    api(`/tickets/${id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setDetail(d));
+  const openTicket = async (id: number) => {
+    // apiFetch rejects when the request never reaches the API; uncaught, a
+    // click on a ticket did nothing and said nothing.
+    const r = await api(`/tickets/${id}`).catch(() => null);
+    if (r === null) {
+      toast.danger("Ticket konnte nicht geöffnet werden — die API ist nicht erreichbar.");
+      return;
+    }
+    setDetail(r.ok ? await r.json() : null);
+  };
 
   if (detail) {
     return (
