@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import { Spinner, toast } from "@tracht-digital-solutions/tds-shared/components";
+import {
+  AnimatedItem,
+  AnimatedList,
+  Collapse,
+  Presence,
+} from "@tracht-digital-solutions/tds-shared/motion/react";
 // `status_color` comes out of the `support_tickets_status` table — i.e. it is
 // whatever an admin typed. Interpolating it straight into a class name was
 // broken twice over: Tailwind cannot statically extract an interpolated class
@@ -73,20 +79,8 @@ export default function TicketBoard() {
     setDetail(r.ok ? await r.json() : null);
   };
 
-  if (detail) {
-    return (
-      <TicketDetailView
-        ticket={detail}
-        onBack={() => {
-          setDetail(null);
-          loadList();
-        }}
-        onReload={() => openTicket(detail.id)}
-      />
-    );
-  }
-
-  return (
+  // Plain JSX, not an inner component (which would remount on every render).
+  const board = (
     <div className="tds-stack">
       <div className="tds-toolbar">
         <button
@@ -98,23 +92,23 @@ export default function TicketBoard() {
         </button>
       </div>
 
-      {creating ? (
+      <Collapse open={creating}>
         <NewTicketForm
           onCreated={() => {
             setCreating(false);
             loadList();
           }}
         />
-      ) : null}
+      </Collapse>
 
       {tickets === null ? (
         <p><Spinner /></p>
       ) : tickets.length === 0 ? (
         <p className="tds-empty">Keine Tickets vorhanden.</p>
       ) : (
-        <ul className="tds-list">
+        <AnimatedList className="tds-list">
           {tickets.map((t) => (
-            <li key={t.id} className="tds-list__row">
+            <AnimatedItem key={t.id} className="tds-list__row">
               <button type="button" className="btn btn-ghost" onClick={() => openTicket(t.id)}>
                 {t.subject}
               </button>
@@ -122,11 +116,30 @@ export default function TicketBoard() {
               {t.customer_action_required ? (
                 <span className="chip chip--warning">Aktion erforderlich</span>
               ) : null}
-            </li>
+            </AnimatedItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
     </div>
+  );
+
+  // Board ↔ one ticket, cross-faded in place. Reloading the open ticket keeps
+  // its key, so a posted reply does not re-fade the whole view.
+  return (
+    <Presence view={detail ? `ticket-${detail.id}` : "board"}>
+      {detail ? (
+        <TicketDetailView
+          ticket={detail}
+          onBack={() => {
+            setDetail(null);
+            loadList();
+          }}
+          onReload={() => openTicket(detail.id)}
+        />
+      ) : (
+        board
+      )}
+    </Presence>
   );
 }
 
@@ -198,18 +211,19 @@ function TicketDetailView({
       <p className="ticket-detail__description">{ticket.description}</p>
 
       {ticket.attachments.length > 0 ? (
-        <ul className="ticket-attachments">
+        <AnimatedList className="ticket-attachments">
           {ticket.attachments.map((a) => (
-            <li key={a.id}>
+            <AnimatedItem key={a.id}>
               <a href={`/tickets/${ticket.id}/attachments/${a.id}`} download>
                 {a.filename}
               </a>
-            </li>
+            </AnimatedItem>
           ))}
-        </ul>
+        </AnimatedList>
       ) : null}
 
-      <ol className="tds-thread">
+      {/* A reply just posted slides into the thread. */}
+      <AnimatedList as="ol" className="tds-thread">
         {ticket.comments.map((c) => (
           // `--own` right-aligns the bubble, `--other` left-aligns it. The side
           // is picked from the same viewpoint the author label already assumes
@@ -217,7 +231,7 @@ function TicketDetailView({
           // counterpart. Mapped explicitly rather than interpolating
           // `--${author_type}`, which would produce a class that matches no rule
           // (the same trap the DB-driven status colour fell into).
-          <li
+          <AnimatedItem
             key={c.id}
             className={`tds-thread__item ${
               c.author_type === "owner" ? "tds-thread__item--other" : "tds-thread__item--own"
@@ -227,9 +241,9 @@ function TicketDetailView({
               {c.author_type === "owner" ? "Support" : "Sie"}
             </span>
             <p>{c.body}</p>
-          </li>
+          </AnimatedItem>
         ))}
-      </ol>
+      </AnimatedList>
 
       <div className="tds-compose">
         <textarea
