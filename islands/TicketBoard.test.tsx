@@ -371,7 +371,12 @@ describe("creating a ticket", () => {
     const u = await openForm();
     expect(screen.getByPlaceholderText("Betreff")).toBeTruthy();
     await u.click(screen.getByRole("button", { name: "Abbrechen" }));
-    expect(screen.queryByPlaceholderText("Betreff")).toBeNull();
+    // The form collapses (tds-shared Collapse): unreachable at once, gone once
+    // the exit has run. Asserting "gone" synchronously raced the animation —
+    // green locally, red on the slower CI runner.
+    const leaving = screen.queryByPlaceholderText("Betreff");
+    if (leaving) expect(leaving.closest('[aria-hidden="true"][inert]')).not.toBeNull();
+    await waitFor(() => expect(screen.queryByPlaceholderText("Betreff")).toBeNull());
   });
 
   it("refuses to submit without a subject", async () => {
