@@ -55,6 +55,12 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
         return [__DIR__ . '/../db/migrations'];
     }
 
+    /** What a portal user may see of their own ticket. */
+    private const CUSTOMER_TICKET_FIELDS = [
+        'id', 'customer_id', 'project_id', 'subject', 'description', 'priority', 'type',
+        'is_terminal', 'customer_action_required', 'customer_action_note', 'created_at', 'updated_at',
+    ];
+
     public function register(App $app): void
     {
         $c = $app->getContainer();
@@ -147,9 +153,21 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
             if ($ticket === null || (int) $ticket['customer_id'] !== $user->activeCompanyId()) {
                 return self::json($res, ['error' => 'Not found'], 404);
             }
-            $ticket['comments'] = $repo->comments((int) $ticket['id'], includeInternal: false);
-            $ticket['attachments'] = $repo->attachments((int) $ticket['id']);
-            return self::json($res, $ticket);
+            // A customer projection, like the list: `t.*` carried internal
+            // columns (assignee, mail threading ids) and the real name of a
+            // status the list masks because it is not visible to customers.
+            $visible = (int) ($ticket['visible_to_customer'] ?? 1) === 1;
+            $out = [];
+            foreach (self::CUSTOMER_TICKET_FIELDS as $field) {
+                if (array_key_exists($field, $ticket)) {
+                    $out[$field] = $ticket[$field];
+                }
+            }
+            $out['status_name'] = $visible ? $ticket['status_name'] : 'In Bearbeitung';
+            $out['status_color'] = $visible ? $ticket['status_color'] : 'info';
+            $out['comments'] = $repo->comments((int) $ticket['id'], includeInternal: false);
+            $out['attachments'] = $repo->attachments((int) $ticket['id']);
+            return self::json($res, $out);
         });
 
         $app->post('/tickets/{id:[0-9]+}/attachments', function (Request $req, Response $res, array $args) use ($c): Response {
