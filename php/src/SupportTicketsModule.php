@@ -20,6 +20,7 @@ use Tds\Frontend\Contract\Mailer;
 use Tds\Frontend\Contract\PermissionDef;
 use Tds\Frontend\Contract\SettingsStore;
 use Tds\Frontend\Contract\UserContext;
+use Tds\Frontend\Contract\ModuleHttp;
 
 /**
  * Backend Module for the support-ticket system (checkpoint-1 surface: customer
@@ -35,6 +36,8 @@ use Tds\Frontend\Contract\UserContext;
  */
 final class SupportTicketsModule extends AbstractModule implements ApiDocSource
 {
+    use ModuleHttp;
+
     public function id(): string
     {
         return 'support-tickets';
@@ -456,29 +459,6 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
 
     // --- helpers ---------------------------------------------------------------
 
-    /** 401/403 response when the principal fails the permission check, else null. */
-    private static function require(UserContext $user, string $permission, Response $res): ?Response
-    {
-        if (!$user->isAuthenticated()) {
-            return self::json($res, ['error' => 'Unauthorized'], 401);
-        }
-        if (!$user->has($permission)) {
-            return self::json($res, ['error' => 'Forbidden'], 403);
-        }
-        return null;
-    }
-
-    private static function requireAdmin(UserContext $user, Response $res): ?Response
-    {
-        if (!$user->isAuthenticated()) {
-            return self::json($res, ['error' => 'Unauthorized'], 401);
-        }
-        if (!$user->isAdmin()) {
-            return self::json($res, ['error' => 'Forbidden'], 403);
-        }
-        return null;
-    }
-
     /**
      * Validate + normalise a ticket_status payload. Returns the clean data array
      * or an error message string.
@@ -511,12 +491,6 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
     {
         $v = is_string($value) ? $value : '';
         return in_array($v, $allowed, true) ? $v : $default;
-    }
-
-    private static function json(Response $res, mixed $data, int $status = 200): Response
-    {
-        $res->getBody()->write(json_encode($data, JSON_THROW_ON_ERROR));
-        return $res->withStatus($status)->withHeader('Content-Type', 'application/json');
     }
 
     /**
