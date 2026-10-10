@@ -15,6 +15,7 @@ use Tds\Ext\SupportTickets\Service\ImapConfig;
 use Tds\Ext\SupportTickets\Service\ImapTicketIngest;
 use Tds\Ext\SupportTickets\Support\AttachmentStorage;
 use Tds\Frontend\Contract\AbstractModule;
+use Tds\Frontend\Contract\SetupStatusSource;
 use Tds\Frontend\Contract\ApiDocSource;
 use Tds\Frontend\Contract\Mailer;
 use Tds\Frontend\Contract\PermissionDef;
@@ -34,8 +35,11 @@ use Tds\Frontend\Contract\ModuleHttp;
  * Still to port (later checkpoints): status registry CRUD, attachments, richer
  * notifications + customer directory, IMAP + contact-form ingest.
  */
-final class SupportTicketsModule extends AbstractModule implements ApiDocSource
+final class SupportTicketsModule extends AbstractModule implements ApiDocSource, SetupStatusSource
 {
+    /** Kept from register() for setupItems(), which the base calls without one. */
+    private ?\Psr\Container\ContainerInterface $setupContainer = null;
+
     use ModuleHttp;
 
     public function id(): string
@@ -64,9 +68,38 @@ final class SupportTicketsModule extends AbstractModule implements ApiDocSource
         'is_terminal', 'customer_action_required', 'customer_action_note', 'created_at', 'updated_at',
     ];
 
+    /**
+     * What the panel's setup wizard should say about this module. Uses the
+     * same check the feature itself runs, never a secret.
+     *
+     * @return list<array<string,string>>
+     */
+    public function setupItems(\Tds\Frontend\Contract\UserContext $user): array
+    {
+        $c = $this->setupContainer;
+        if ($c === null) {
+            return [];
+        }
+        $items = [];
+        try {
+            $items[] = [
+                'id' => 'support-tickets:imap',
+                'module' => 'support-tickets',
+                'title' => 'Tickets aus dem Postfach (IMAP)',
+                'description' => 'Ohne IMAP-Zugang werden E-Mails an das Support-Postfach nicht zu Tickets und Antworten per E-Mail kommen nicht an.',
+                'state' => ImapConfig::resolve(self::settingsStore($c))->isConfigured() ? 'ok' : 'missing',
+                'level' => 'optional',
+                'href' => '/einstellungen#settings-support-tickets',
+            ];
+        } catch (\Throwable) {
+        }
+        return $items;
+    }
+
     public function register(App $app): void
     {
         $c = $app->getContainer();
+        $this->setupContainer = $c;
         // NEVER guard these with `!$c->has(X)`. PHP-DI answers `has()` from its
         // definition sources, and autowiring is one of them: for any *concrete,
         // instantiable* class the answer is always true, whether or not anyone
