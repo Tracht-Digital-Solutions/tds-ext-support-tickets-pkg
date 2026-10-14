@@ -71,3 +71,14 @@ composer test      # phpunit — route/RBAC coverage; DB-backed tests skip witho
 Host `astro.config.mjs`: add the manifest to `frontendHost({ extensions: [...] })`.
 Base API: add `new SupportTicketsModule()` to `Modules::enabled()`. Set
 `TICKET_ADMIN_EMAIL` (+ the core `MAIL_DSN`) for admin notifications.
+
+## Lizenz / License
+
+**Öffentlich einsehbar, alle Rechte vorbehalten.** Der Code kann gelesen und
+zur Beurteilung der Programmierkenntnisse betrachtet werden. Es besteht keine
+allgemeine Erlaubnis zum Kopieren, Verändern oder kommerziellen Weiterverwenden.
+Die vollständigen Bedingungen und Ausnahmen stehen in [LICENSE](LICENSE).
+
+**Publicly viewable, all rights reserved.** Public access permits inspection of
+the code, but grants no general permission to copy, modify or commercially reuse
+it. See [LICENSE](LICENSE) for the complete terms and exceptions.
