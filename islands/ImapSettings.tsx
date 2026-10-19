@@ -1,14 +1,8 @@
 import { useEffect, useState } from "react";
 import { FormAlert, Spinner, toast } from "@tracht-digital-solutions/tds-shared/components";
-import { apiFetch } from "@tracht-digital-solutions/tds-shared/api";
+import { apiFetch, sendJson } from "@tracht-digital-solutions/tds-shared/api";
+import type { MaskedSetting as Masked } from "@tracht-digital-solutions/tds-shared/admin";
 
-interface Masked {
-  key: string;
-  secret: boolean;
-  configured?: boolean;
-  last4?: string | null;
-  value?: string;
-}
 
 interface ImapStatus {
   configured: boolean;
@@ -35,7 +29,6 @@ interface PollResult {
   polled: boolean;
 }
 
-const api = apiFetch;
 const NS = "/admin/settings/support-tickets";
 const STATUS = "/admin/tickets/imap";
 const TEST = "/admin/tickets/imap-test";
@@ -107,7 +100,7 @@ export default function ImapSettings() {
 
   const load = async () => {
     try {
-      const [settingsRes, statusRes] = await Promise.all([api(NS), api(STATUS)]);
+      const [settingsRes, statusRes] = await Promise.all([apiFetch(NS), apiFetch(STATUS)]);
       if (!settingsRes.ok) {
         setError(
           settingsRes.status === 401 || settingsRes.status === 403
@@ -145,10 +138,7 @@ export default function ImapSettings() {
   const save = async () => {
     setBusy(true);
     try {
-      const res = await api(NS, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await sendJson(NS, "PUT", {
           settings: [
             { key: "imap_host", secret: false, value: host.trim() },
             { key: "imap_port", secret: false, value: port.trim() },
@@ -161,8 +151,7 @@ export default function ImapSettings() {
             { key: "ingest_match_company", secret: false, value: matchCompany ? "1" : "0" },
             { key: "ingest_token", secret: true, value: token },
           ],
-        }),
-      });
+        });
       if (res.ok) {
         setPassword("");
         setToken("");
@@ -182,7 +171,7 @@ export default function ImapSettings() {
     setTesting(true);
     setActionError(null);
     try {
-      const res = await api(TEST);
+      const res = await apiFetch(TEST);
       const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (res.ok && data?.ok) {
         toast.success("Verbindung steht.");
@@ -206,7 +195,7 @@ export default function ImapSettings() {
     setPolling(true);
     setActionError(null);
     try {
-      const res = await api(POLL, { method: "POST" });
+      const res = await apiFetch(POLL, { method: "POST" });
       const data = (await res.json().catch(() => null)) as (PollResult & { error?: string }) | null;
       if (!res.ok || !data) {
         setActionError(

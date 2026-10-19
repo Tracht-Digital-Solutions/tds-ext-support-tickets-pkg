@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Spinner, toast } from "@tracht-digital-solutions/tds-shared/components";
-import { apiFetch } from "@tracht-digital-solutions/tds-shared/api";
+import { apiFetch, sendJson } from "@tracht-digital-solutions/tds-shared/api";
 
 type Toggles = Record<string, boolean>;
 
@@ -9,8 +9,6 @@ const LABELS: Record<string, string> = {
   notify_customer_on_status: "Kunde bei Statusänderung benachrichtigen",
   notify_customer_on_reply: "Kunde bei Antwort benachrichtigen",
 };
-
-const api = apiFetch;
 
 /**
  * Admin notification toggles (checkpoint-4). Reads/writes
@@ -22,7 +20,7 @@ export default function NotificationSettings() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api("/admin/ticket-settings")
+    apiFetch("/admin/ticket-settings")
       .then((r) => (r.ok ? r.json() : { settings: {} }))
       .then((d) => setToggles(d.settings ?? {}))
       .catch(() => setToggles({}));
@@ -39,11 +37,7 @@ export default function NotificationSettings() {
     setToggles(next);
     setSaving(true);
     try {
-      const res = await api("/admin/ticket-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next),
-      });
+      const res = await sendJson("/admin/ticket-settings", "PUT", next);
       if (res.ok) {
         toast.success("Benachrichtigungen gespeichert.");
       } else {

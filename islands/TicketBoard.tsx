@@ -14,7 +14,7 @@ import {
 // known aliases (violet -> cat-violet, red -> danger, …) and falls back to
 // `neutral`, so the class it returns always exists in primitives.css.
 import { resolveChipVariant } from "@tracht-digital-solutions/tds-shared/design";
-import { apiFetch } from "@tracht-digital-solutions/tds-shared/api";
+import { apiFetch, sendJson } from "@tracht-digital-solutions/tds-shared/api";
 
 interface TicketRow {
   id: number;
@@ -45,8 +45,6 @@ interface TicketDetail extends TicketRow {
   attachments: Attachment[];
 }
 
-const api = apiFetch;
-
 /**
  * Portal ticket board (checkpoint-2): the customer's list + detail + comment
  * thread + new-ticket form. Admin triage lives behind /admin/tickets (admin
@@ -59,7 +57,7 @@ export default function TicketBoard() {
   const [creating, setCreating] = useState(false);
 
   const loadList = () =>
-    api("/tickets")
+    apiFetch("/tickets")
       .then((r) => (r.ok ? r.json() : { tickets: [] }))
       .then((d) => setTickets(d.tickets ?? []))
       .catch(() => setTickets([]));
@@ -71,7 +69,7 @@ export default function TicketBoard() {
   const openTicket = async (id: number) => {
     // apiFetch rejects when the request never reaches the API; uncaught, a
     // click on a ticket did nothing and said nothing.
-    const r = await api(`/tickets/${id}`).catch(() => null);
+    const r = await apiFetch(`/tickets/${id}`).catch(() => null);
     if (r === null) {
       toast.danger("Ticket konnte nicht geöffnet werden — die API ist nicht erreichbar.");
       return;
@@ -162,11 +160,7 @@ function TicketDetailView({
     if (reply.trim() === "") return;
     setSending(true);
     try {
-      const res = await api(`/tickets/${ticket.id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: reply.trim() }),
-      });
+      const res = await sendJson(`/tickets/${ticket.id}/comments`, "POST", { body: reply.trim() });
       if (res.ok) {
         setReply("");
         onReload();
@@ -184,7 +178,7 @@ function TicketDetailView({
     const form = new FormData();
     form.append("file", file);
     try {
-      const res = await api(`/tickets/${ticket.id}/attachments`, { method: "POST", body: form });
+      const res = await apiFetch(`/tickets/${ticket.id}/attachments`, { method: "POST", body: form });
       if (res.ok) {
         toast.success(`„${file.name}" hochgeladen.`);
         onReload();
@@ -290,11 +284,7 @@ function NewTicketForm({ onCreated }: { onCreated: () => void }) {
     if (subject.trim() === "" || description.trim() === "") return;
     setSaving(true);
     try {
-      const res = await api("/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, description, type, priority }),
-      });
+      const res = await sendJson("/tickets", "POST", { subject, description, type, priority });
       if (res.ok) {
         toast.success("Ticket erstellt.");
         onCreated();
