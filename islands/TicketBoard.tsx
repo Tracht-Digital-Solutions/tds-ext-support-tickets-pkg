@@ -15,6 +15,7 @@ import {
 // `neutral`, so the class it returns always exists in primitives.css.
 import { resolveChipVariant } from "@tracht-digital-solutions/tds-shared/design";
 import { apiFetch, sendJson } from "@tracht-digital-solutions/tds-shared/api";
+import { FileDropZone } from "@tracht-digital-solutions/tds-shared/dropzone";
 
 interface TicketRow {
   id: number;
@@ -257,18 +258,13 @@ function TicketDetailView({
           {sending ? <Spinner size="sm" /> : null}
           Senden
         </button>
-        <label className="ticket-reply__attach">
-          Datei anhängen
-          <input
-            type="file"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f);
-              e.target.value = "";
-            }}
-          />
-        </label>
       </div>
+      <FileDropZone
+        label="Datei anhängen"
+        hint="oder hierher ziehen"
+        activeLabel="Loslassen zum Anhängen"
+        onFiles={([f]) => void upload(f)}
+      />
     </article>
   );
 }
