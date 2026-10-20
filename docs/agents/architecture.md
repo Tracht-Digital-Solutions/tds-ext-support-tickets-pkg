@@ -44,7 +44,8 @@ board renders them through `resolveChipVariant()`.
   with a MIME allow-list and a 25 MB limit. Unset `TICKET_UPLOAD_DIR` → uploads **503**.
 - Downloads are cookie-authenticated streams, not signed URLs; the session cookie is sent
   on `<a download>`.
-- Uploads go out as multipart `FormData`, never JSON.
+- Uploads go out as multipart `FormData`, never JSON. The reply box picks or takes a dropped
+  file through tds-shared's `<FileDropZone>`, never a bare file input.
 
 ## Email notifications
 
